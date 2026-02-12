@@ -340,6 +340,7 @@
                         <div class="metric-row"><span class="metric-label">MELTING TEMP</span><span class="metric-val highlight" id="m-tm">0°C</span></div>
                         <div class="metric-row"><span class="metric-label">MOL. WEIGHT</span><span class="metric-val" id="m-mw">0 kDa</span></div>
                         <div class="metric-row"><span class="metric-label">ISOELECTRIC PT</span><span class="metric-val" id="m-pi" style="color:var(--accent-purple)">0.0</span></div>
+                        <div class="metric-row"><span class="metric-label">EXTINCTION COEFF.</span><span class="metric-val" id="m-ec" style="color:var(--accent-green)">0 M⁻¹cm⁻¹</span></div>
                         
                         <div class="bar-container" id="base-chart">
                             <div class="bar-col" id="bar-a" style="height:10%"><div class="bar-label">A</div></div>
@@ -572,6 +573,33 @@
                                 Idle.
                             </div>
                         </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-cyan)">OLIGO RESUSPENSION CALCULATOR</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:flex-end; flex-wrap:wrap;">
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">YIELD (nmoles)</div>
+                                    <input type="number" id="oligo-nmol" value="25.5">
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">TARGET CONC. (µM)</div>
+                                    <input type="number" id="oligo-conc" value="100">
+                                </div>
+                                <button class="btn btn-mini" style="height:45px;" onclick="window.calcOligo()">CALC</button>
+                            </div>
+                            <div id="oligo-out" style="margin-top:10px; font-family:monospace; font-size:0.7rem; color:var(--accent-cyan);">
+                                Add buffer to resuspend.
+                            </div>
+                        </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-yellow)">SEQUENCE FORMATTER</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <button class="btn btn-mini" onclick="window.formatSequence(10)">GROUP BY 10</button>
+                                <button class="btn btn-mini" onclick="window.formatSequence(60)">GROUP BY 60</button>
+                                <button class="btn btn-mini" onclick="window.formatSequence(0)">STRIP FORMATTING</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -756,6 +784,9 @@
                 const piVal = calculatePI(currentProtein);
                 document.getElementById('m-pi').innerText = piVal.toFixed(2);
 
+                const ecVal = calculateExtinctionCoefficient(currentProtein);
+                document.getElementById('m-ec').innerText = ecVal.toLocaleString() + " M⁻¹cm⁻¹";
+
                 analyzeCodons();
                 window.log(`ANALYSIS COMPLETE: ${seq.length} BP`, 'success');
                 window.refreshVisuals();
@@ -810,6 +841,18 @@
                     if(charge > 0) min = mid; else max = mid;
                 }
                 return (min+max)/2;
+            }
+
+            function calculateExtinctionCoefficient(prot) {
+                if(!prot) return 0;
+                let numW = 0, numY = 0, numC = 0;
+                for(let aa of prot) {
+                    if(aa === 'W') numW++;
+                    if(aa === 'Y') numY++;
+                    if(aa === 'C') numC++;
+                }
+                // Assumes pairs of cysteines form half-cystines (disulfide bonds) for baseline max calculation
+                return (numW * 5500) + (numY * 1490) + (numC * 125);
             }
 
             // --- NEW: CPG ISLAND DETECTOR ---
@@ -1175,6 +1218,31 @@
                 window.log(`CRISPR: ${count} CANDIDATE SITES`);
             };
 
+            window.calcOligo = function() {
+                const nmol = parseFloat(document.getElementById('oligo-nmol').value);
+                const conc = parseFloat(document.getElementById('oligo-conc').value);
+                if(!nmol || !conc) return;
+                // V = n / C. If n is nmoles and C is uM (umol/L), V in uL = (nmol / conc) * 1000
+                const vol = (nmol / conc) * 1000;
+                document.getElementById('oligo-out').innerHTML = `ADD <span style="color:#fff; font-weight:bold;">${vol.toFixed(1)} µL</span> OF BUFFER TO REACH ${conc} µM`;
+                window.log(`OLIGO CALC: ${vol.toFixed(1)} µL`);
+            };
+
+            window.formatSequence = function(groupSize) {
+                if(!globalSeq) return;
+                if(groupSize === 0) {
+                    document.getElementById('dnaInput').value = globalSeq;
+                    return;
+                }
+                let formatted = "";
+                for(let i=0; i<globalSeq.length; i+=groupSize) {
+                    formatted += globalSeq.substring(i, i+groupSize) + " ";
+                    if((i + groupSize) % 60 === 0) formatted += "\n";
+                }
+                document.getElementById('dnaInput').value = formatted.trim();
+                window.log(`SEQUENCE FORMATTED (BLOCKS OF ${groupSize})`);
+            };
+
             // --- GRAPHICS: MUTATION MAP ---
             function drawMutationMap(refLen) {
                 if(!mutGraph.offsetWidth) return;
@@ -1306,15 +1374,56 @@
             const bgC = document.getElementById('bgCanvas'), bgCtx = bgC.getContext('2d');
             const hC = document.getElementById('helixCanvas'), hCtx = hC.getContext('2d');
             let time = 0;
+            
+            // Background particles
+            const particles = [];
+            for(let i=0; i<60; i++) {
+                particles.push({
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: (Math.random() - 0.5) * 0.4
+                });
+            }
 
             function animLoop() {
                 time += 0.05;
                 if(bgC.width !== window.innerWidth) { bgC.width = window.innerWidth; bgC.height = window.innerHeight; }
                 bgCtx.clearRect(0,0,bgC.width, bgC.height);
-                bgCtx.fillStyle = `rgba(0, 240, 255, 0.05)`;
+                
+                // Draw floating network
+                bgCtx.fillStyle = "rgba(0, 240, 255, 0.4)";
+                bgCtx.strokeStyle = "rgba(0, 240, 255, 0.15)";
+                bgCtx.lineWidth = 1;
+                
+                for(let i=0; i<particles.length; i++) {
+                    let p = particles[i];
+                    p.x += p.vx; p.y += p.vy;
+                    if(p.x < 0) p.x = bgC.width; if(p.x > bgC.width) p.x = 0;
+                    if(p.y < 0) p.y = bgC.height; if(p.y > bgC.height) p.y = 0;
+                    
+                    bgCtx.beginPath();
+                    bgCtx.arc(p.x, p.y, 1.5, 0, Math.PI*2);
+                    bgCtx.fill();
+                    
+                    for(let j=i+1; j<particles.length; j++) {
+                        let p2 = particles[j];
+                        let dx = p.x - p2.x, dy = p.y - p2.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        if(dist < 120) {
+                            bgCtx.beginPath();
+                            bgCtx.moveTo(p.x, p.y);
+                            bgCtx.lineTo(p2.x, p2.y);
+                            bgCtx.stroke();
+                        }
+                    }
+                }
+
+                // Add scanlines over network
+                bgCtx.fillStyle = `rgba(0, 0, 0, 0.15)`;
                 for(let i=0; i<20; i++) {
                     const y = (time * 10 + i * 50) % bgC.height;
-                    bgCtx.fillRect(0, y, bgC.width, 1);
+                    bgCtx.fillRect(0, y, bgC.width, 2);
                 }
 
                 if(hC.offsetWidth !== hC.width) { hC.width = hC.offsetWidth; hC.height = hC.offsetHeight; }

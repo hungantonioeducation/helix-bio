@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HELIX | VOID INTERFACE v15.0</title>
+    <style>
+        :root {
+            /* THEME: Deep Space HUD */
+            --bg-core: #020202;
+            --bg-card: rgba(10, 12, 16, 0.90);
+            --border: #333;
+            --accent-cyan: #00f0ff;
+            --accent-pink: #ff003c;
+            --accent-yellow: #fcee0a;
+            --accent-green: #0aff60;
+            --accent-purple: #bd00ff;
+            --text-primary: #ffffff;
+            --text-secondary: #888;
+            --font-hud: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: 'Courier New', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--accent-cyan) #111; }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #050505; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-cyan); }
+
+        body {
+            background-color: var(--bg-core);
+            color: var(--text-primary);
+            font-family: var(--font-hud);
+            height: 100vh;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 260px 1fr;
+        }
+
+        /* --- BACKGROUND FX --- */
+        #bgCanvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; pointer-events: none; opacity: 0.5;
+        }
+
+        /* --- SIDEBAR --- */
+        aside {
+            background: rgba(8, 8, 10, 0.95);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            padding: 20px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            box-shadow: 5px 0 20px rgba(0,0,0,0.5);
+        }
+
+        .brand {
+            font-size: 1.8rem; font-weight: 900; letter-spacing: 3px;
+            color: var(--text-primary); margin-bottom: 5px;
+            text-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+        }
+        .brand span { color: var(--accent-cyan); }
+        .subtitle { font-size: 0.65rem; color: var(--text-secondary); letter-spacing: 2px; margin-bottom: 25px; }
+
+        .helix-container {
+            width: 100%; height: 160px;
+            background: #000;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+            position: relative;
+        }
+        canvas#helixCanvas { width: 100%; height: 100%; display: block; }
+
+        /* NAV */
+        .nav-menu { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .nav-item {
+            padding: 12px 15px; border-bottom: 1px solid #1a1a1a;
+            cursor: pointer; transition: 0.2s; font-size: 0.85rem;
+            display: flex; justify-content: space-between; align-items: center;
+            position: relative; overflow: hidden;
+        }
+        .nav-item::before {
+            content:''; position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+            background: var(--accent-cyan); transition: 0.2s; opacity: 0.1;
+        }
+        .nav-item:hover::before { width: 100%; }
+        .nav-item:hover { color: var(--accent-cyan); }
+        .nav-item.active { border-right: 3px solid var(--accent-cyan); color: var(--accent-cyan); background: rgba(0, 240, 255, 0.05); }
+
+        /* --- MAIN LAYOUT --- */
+        main {
+            padding: 30px;
+            overflow-y: auto;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            gap: 20px;
+        }
+
+        .content-area { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+        
+        .log-panel {
+            width: 320px;
+            display: flex; flex-direction: column; gap: 20px;
+            position: sticky; top: 0;
+            height: fit-content;
+        }
+        @media (max-width: 1300px) {
+            main { flex-direction: column; }
+            .log-panel { width: 100%; position: relative; }
+        }
+
+        .view-section { display: none; animation: fadeIn 0.3s ease; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- GRID --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        .span-2 { grid-column: span 2; }
+        .span-full { grid-column: 1 / -1; }
+        @media(max-width: 1000px) { .span-2, .span-full { grid-column: span 1; } }
+
+        /* --- CARDS --- */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 20px;
+            position: relative;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+            backdrop-filter: blur(8px);
+            transition: 0.3s;
+        }
+        .card:hover { border-color: #555; }
+        
+        /* Tech Corners */
+        .card::before { content:''; position: absolute; top: -1px; left: -1px; width: 6px; height: 6px; border-top: 2px solid var(--accent-cyan); border-left: 2px solid var(--accent-cyan); }
+        .card::after { content:''; position: absolute; bottom: -1px; right: -1px; width: 6px; height: 6px; border-bottom: 2px solid var(--accent-cyan); border-right: 2px solid var(--accent-cyan); }
+
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px;
+        }
+        .card-title { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-cyan); font-weight: bold; letter-spacing: 1px;}
+        
+        /* --- INPUTS --- */
+        textarea, input[type="text"], input[type="number"] {
+            width: 100%; 
+            background: rgba(0,0,0,0.5); border: 1px solid #333;
+            color: var(--accent-cyan); font-family: var(--font-mono);
+            padding: 15px; resize: none; outline: none;
+            font-size: 0.8rem; line-height: 1.4;
+        }
+        textarea:focus, input:focus { border-color: var(--accent-cyan); background: rgba(0, 240, 255, 0.05); }
+
+        .btn-row { display: flex; gap: 8px; margin-top: 15px; flex-wrap: wrap; }
+        .btn {
+            background: var(--accent-cyan); color: #000;
+            border: none; padding: 8px 16px;
+            font-weight: bold; cursor: pointer; text-transform: uppercase;
+            font-size: 0.7rem; letter-spacing: 1px;
+            transition: 0.2s;
+        }
+        .btn:hover { background: #fff; box-shadow: 0 0 10px var(--accent-cyan); }
+        .btn-ghost { background: transparent; border: 1px solid #444; color: #aaa; }
+        .btn-ghost:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .btn-danger { background: transparent; border: 1px solid var(--accent-pink); color: var(--accent-pink); }
+        .btn-danger:hover { background: var(--accent-pink); color: #000; }
+        .btn-mini { padding: 4px 8px; font-size: 0.6rem; border: 1px solid #333; color: #666; background: transparent; cursor: pointer;}
+        .btn-mini.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,240,255,0.1); }
+
+        /* --- METRICS --- */
+        .metric-row {
+            display: flex; justify-content: space-between;
+            border-bottom: 1px solid #222; padding: 6px 0;
+            font-size: 0.8rem;
+        }
+        .metric-val { font-family: var(--font-mono); color: #fff; }
+        .metric-val.highlight { color: var(--accent-yellow); }
+
+        /* --- GRAPHICS --- */
+        .canvas-container {
+            width: 100%; height: 250px;
+            background: #080808; border: 1px solid #222;
+            position: relative; overflow: hidden;
+        }
+        canvas#mainGraph, canvas#mutationGraph { width: 100%; height: 100%; display:block; cursor: crosshair; }
+        
+        .bar-container {
+            display: flex; align-items: flex-end; gap: 5px; height: 60px; margin-top: 15px;
+            border-bottom: 1px solid #333; padding-bottom: 5px;
+        }
+        .bar-col { flex: 1; background: #222; transition: height 0.5s; position: relative; cursor: help; }
+        .bar-col:hover { background: var(--accent-cyan); }
+        .bar-label { position: absolute; bottom: -15px; width: 100%; text-align: center; font-size: 0.6rem; color: #666; }
+
+        /* --- TOOLTIP --- */
+        #chartTooltip {
+            position: fixed; 
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid var(--accent-cyan);
+            padding: 8px; 
+            pointer-events: none;
+            display: none;
+            font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-cyan);
+            z-index: 10000; 
+            box-shadow: 0 0 15px rgba(0,240,255,0.2);
+            white-space: pre;
+            transform: translate(15px, 15px);
+        }
+
+        /* --- TERMINAL / LOGS --- */
+        .terminal-window {
+            height: 300px;
+            background: #050505; border: 1px solid #333;
+            padding: 10px; font-family: var(--font-mono); font-size: 0.7rem;
+            color: #666; overflow-y: auto;
+            display: flex; flex-direction: column-reverse;
+            box-shadow: inset 0 0 10px #000;
+        }
+        .log-entry { margin-bottom: 4px; border-left: 2px solid transparent; padding-left: 5px; animation: flash 0.5s; word-wrap: break-word;}
+        @keyframes flash { from { background: rgba(255,255,255,0.1); } to { background: transparent; } }
+        .log-entry.info { border-color: var(--accent-cyan); color: #ccc; }
+        .log-entry.warn { border-color: var(--accent-pink); color: #ff8888; }
+        .log-entry.success { border-color: var(--accent-green); color: var(--accent-green); }
+
+        /* --- TABLES & TEXT BLOCKS --- */
+        .db-table {
+            width: 100%; border-collapse: collapse; font-size: 0.75rem; font-family: var(--font-mono);
+            color: #aaa;
+        }
+        .db-table th { text-align: left; border-bottom: 1px solid #333; padding: 5px; color: var(--accent-cyan); position: sticky; top: 0; background: var(--bg-card); }
+        .db-table td { border-bottom: 1px solid #1a1a1a; padding: 5px; }
+        .match-high { color: var(--accent-green); text-shadow: 0 0 5px rgba(10,255,96,0.3); }
+        .match-med { color: var(--accent-yellow); }
+        .match-low { color: var(--accent-pink); }
+        
+        .mut-pos { color: var(--accent-cyan); }
+        .mut-ref { color: #888; }
+        .mut-alt { color: var(--accent-pink); font-weight: bold; }
+
+        .code-block {
+            font-family: var(--font-mono); font-size: 0.7rem; color: #888; 
+            max-height: 150px; overflow-y: auto; background: #000; 
+            padding: 10px; border: 1px solid #222; white-space: pre-wrap; word-break: break-all;
+        }
+        
+        /* ALIGNMENT VIEWER */
+        .alignment-view {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            line-height: 1.2;
+            white-space: pre;
+            overflow-x: auto;
+            background: #050505;
+            padding: 15px;
+            border: 1px solid #222;
+            color: #aaa;
+        }
+        .aln-match { color: var(--accent-green); font-weight: bold; }
+        .aln-mismatch { color: var(--accent-pink); }
+
+        /* --- CODON GRID --- */
+        .codon-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 5px;
+            max-height: 200px; overflow-y: auto;
+        }
+        .codon-cell {
+            background: #111; padding: 5px; font-size: 0.65rem; text-align: center;
+            border: 1px solid #222;
+        }
+        .codon-cell span { display: block; color: var(--accent-cyan); font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="bgCanvas"></canvas>
+    <div id="chartTooltip"></div>
+
+    <aside>
+        <div class="brand">HELIX<span>OS</span></div>
+        <div class="subtitle">BIO-COMPUTATIONAL ENGINE V15.0</div>
+        
+        <div class="helix-container">
+            <canvas id="helixCanvas"></canvas>
+            <div style="position:absolute; bottom:5px; left:10px; font-size:0.6rem; color:#444;">IDLE PROCESS</div>
+        </div>
+
+        <div class="nav-menu">
+            <div id="nav-dashboard" class="nav-item active" onclick="window.switchTab('dashboard')">
+                <div>DASHBOARD</div>
+            </div>
+            <div id="nav-mutation" class="nav-item" onclick="window.switchTab('mutation')">
+                <div>VARIANT CALLER</div>
+            </div>
+            <div id="nav-compare" class="nav-item" onclick="window.switchTab('compare')">
+                <div>HOMOLOGY DB</div>
+            </div>
+            <div id="nav-editor" class="nav-item" onclick="window.switchTab('editor')">
+                <div>ENGINEERING</div>
+            </div>
+            <div id="nav-export" class="nav-item" onclick="window.switchTab('export')">
+                <div>EXPORT</div>
+            </div>
+        </div>
+        
+        <div style="margin-top:auto; font-size:0.7rem; color:#444; font-family:var(--font-mono);">
+            SYSTEM: ONLINE<br>LATENCY: 2ms
+        </div>
+    </aside>
+
+    <main>
+        <div class="content-area">
+            
+            <div id="view-dashboard" class="view-section active">
+                <div class="dashboard-grid">
+                    
+                    <div class="card span-full">
+                        <div class="card-header"><span class="card-title">SEQUENCE INPUT STREAM (SAMPLE)</span></div>
+                        <textarea id="dnaInput" placeholder="> PASTE FASTA OR RAW SEQUENCE..."></textarea>
+                        <div class="btn-row">
+                            <button class="btn" onclick="window.processData()">ANALYZE</button>
+                            <button class="btn btn-ghost" onclick="window.loadSample('insulin')">LOAD INSULIN</button>
+                            <button class="btn btn-ghost" onclick="window.loadSample('cpg')">LOAD CPG TEST</button>
+                            <button class="btn btn-ghost" onclick="window.clearData()">CLEAR</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">MOLECULAR METRICS</span></div>
+                        <div class="metric-row"><span class="metric-label">LENGTH</span><span class="metric-val" id="m-len">0 bp</span></div>
+                        <div class="metric-row"><span class="metric-label">GC CONTENT</span><span class="metric-val" id="m-gc">0%</span></div>
+                        <div class="metric-row"><span class="metric-label">MELTING TEMP</span><span class="metric-val highlight" id="m-tm">0°C</span></div>
+                        <div class="metric-row"><span class="metric-label">MOL. WEIGHT</span><span class="metric-val" id="m-mw">0 kDa</span></div>
+                        <div class="metric-row"><span class="metric-label">ISOELECTRIC PT</span><span class="metric-val" id="m-pi" style="color:var(--accent-purple)">0.0</span></div>
+                        
+                        <div class="bar-container" id="base-chart">
+                            <div class="bar-col" id="bar-a" style="height:10%"><div class="bar-label">A</div></div>
+                            <div class="bar-col" id="bar-t" style="height:10%"><div class="bar-label">T</div></div>
+                            <div class="bar-col" id="bar-c" style="height:10%"><div class="bar-label">C</div></div>
+                            <div class="bar-col" id="bar-g" style="height:10%"><div class="bar-label">G</div></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">CPG ISLAND DETECTOR</span></div>
+                        <p style="font-size:0.7rem; color:#666; margin-bottom:10px;">Scans for epigenetic regulatory islands (Obs/Exp > 0.6, GC > 50%).</p>
+                        <button class="btn btn-mini" onclick="window.runCpGScan()">SCAN SEQUENCE</button>
+                        <div id="cpg-results" style="margin-top:10px; height:120px; overflow-y:auto; font-family:monospace; font-size:0.7rem; color:#888;">
+                            Ready to scan.
+                        </div>
+                    </div>
+
+                    <div class="card span-full">
+                        <div class="card-header">
+                            <span class="card-title">ANALYTICAL PROJECTION</span>
+                            <div>
+                                <button id="btn-hydro" class="btn btn-mini active" onclick="window.setGraphMode('hydro')">HYDROPATHY</button>
+                                <button id="btn-skew" class="btn btn-mini" onclick="window.setGraphMode('skew')">GC SKEW</button>
+                                <button id="btn-struct" class="btn btn-mini" onclick="window.setGraphMode('structure')">2° STRUCTURE</button>
+                            </div>
+                        </div>
+                        <div class="canvas-container">
+                            <canvas id="mainGraph"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">CODON USAGE</span></div>
+                        <div id="codon-output" class="codon-grid">
+                            <div style="grid-column:1/-1; color:#444; text-align:center; padding:20px;">No Data</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">ORF FINDER</span></div>
+                        <button class="btn btn-mini" onclick="window.findORF()">SCAN ORFs</button>
+                        <div id="orf-results" class="code-block" style="margin-top:10px; height:180px;">
+                            Ready to scan...
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div id="view-mutation" class="view-section">
+                <div class="dashboard-grid">
+                    <div class="card span-full">
+                        <div class="card-header"><span class="card-title">REFERENCE ALIGNMENT</span></div>
+                        <p style="font-size:0.75rem; color:#888; margin-bottom:10px;">
+                            Paste a reference sequence below to compare against your Dashboard Input (Sample).
+                        </p>
+                        <textarea id="refInput" placeholder="> PASTE REFERENCE SEQUENCE HERE..." style="height:100px; margin-bottom:15px;"></textarea>
+                        
+                        <div class="btn-row">
+                            <button class="btn" onclick="window.runVariantCaller()">CALL VARIANTS</button>
+                            <button class="btn btn-ghost" onclick="window.loadSample('mutant')">LOAD DEMO DATA</button>
+                        </div>
+                    </div>
+
+                    <div class="card span-2">
+                        <div class="card-header"><span class="card-title">MUTATION MAP</span></div>
+                        <div class="canvas-container" style="height:150px;">
+                            <canvas id="mutationGraph"></canvas>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.7rem; color:#666;">
+                            <span>5' START</span>
+                            <span id="mut-identity">IDENTITY: 0%</span>
+                            <span>3' END</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><span class="card-title">VARIANT TABLE</span></div>
+                        <div style="height:200px; overflow-y:auto; background:#050505; border:1px solid #222;">
+                            <table class="db-table">
+                                <thead>
+                                    <tr>
+                                        <th>POS</th>
+                                        <th>REF</th>
+                                        <th>ALT</th>
+                                        <th>TYPE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="variant-results">
+                                    <tr><td colspan="4" style="text-align:center; padding:20px;">NO DATA</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-compare" class="view-section">
+                <div class="dashboard-grid">
+                    <div class="card span-full">
+                        <div class="card-header"><span class="card-title">LOCAL DATABASE COMPARISON</span></div>
+                        <button class="btn" style="width:200px; margin-bottom:20px;" onclick="window.runHomologySearch()">RUN ALIGNMENT</button>
+                        <div style="background:#050505; padding:10px; border:1px solid #222;">
+                            <table class="db-table">
+                                <thead>
+                                    <tr><th>ACCESSION / NAME</th><th>ORGANISM</th><th>IDENTITY %</th><th>SCORE</th></tr>
+                                </thead>
+                                <tbody id="homology-results">
+                                    <tr><td colspan="4" style="text-align:center; padding:20px;">NO ALIGNMENT DATA</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card span-full">
+                        <div class="card-header"><span class="card-title">PAIRWISE ALIGNMENT VIEWER</span></div>
+                        <p style="font-size:0.7rem; color:#666; margin-bottom:10px;">Base-to-base visual map of the top DB hit vs Sample sequence.</p>
+                        <div id="alignment-viewer" class="alignment-view">
+                            Run alignment to view mapping.
+                        </div>
+                    </div>
+
+                    <div class="card span-full">
+                         <div class="card-header"><span class="card-title">DOT PLOT MATRIX</span></div>
+                         <p style="font-size:0.7rem; color:#666; margin-bottom:10px;">Visualizes similarity. Comparing: Sample vs. Reference (or Self).</p>
+                         <div class="canvas-container" style="height:300px;">
+                             <canvas id="dotPlotCanvas"></canvas>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-editor" class="view-section">
+                <div class="dashboard-grid">
+                    <div class="card span-full">
+                        <div class="card-header"><span class="card-title">GENETIC ENGINEERING SUITE</span></div>
+                        <div class="btn-row">
+                            <button class="btn btn-ghost" onclick="window.editorAction('rev')">REVERSE</button>
+                            <button class="btn btn-ghost" onclick="window.editorAction('comp')">COMPLEMENT</button>
+                            <button class="btn btn-ghost" onclick="window.editorAction('revcomp')">REV-COMP</button>
+                            <button class="btn btn-ghost" onclick="window.editorAction('rna')">TO RNA</button>
+                            <button class="btn btn-ghost" onclick="window.generateRandomSeq()">GEN RANDOM</button>
+                        </div>
+                        
+                        <!-- NEW: Codon Optimizer -->
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-green)">CODON OPTIMIZER (E. COLI)</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <button class="btn btn-mini" onclick="window.runCodonOptimization()">OPTIMIZE</button>
+                                <span style="font-size:0.7rem; color:#666;">Back-translates protein using highly expressed E. coli codons.</span>
+                            </div>
+                            <div id="optimizer-out" class="code-block" style="margin-top:10px; color:var(--accent-green);">
+                                Idle.
+                            </div>
+                        </div>
+
+                        <!-- NEW: 6-Frame Translation -->
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-cyan)">6-FRAME TRANSLATION MAP</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <button class="btn btn-mini" onclick="window.runSixFrameTranslation()">TRANSLATE ALL</button>
+                            </div>
+                            <div id="six-frame-out" class="code-block" style="margin-top:10px;">
+                                Pending execution.
+                            </div>
+                        </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-yellow)">CLONING CALCULATOR</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:flex-end; flex-wrap:wrap;">
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">VECTOR LEN (bp)</div>
+                                    <input type="number" id="cl-vec-len" value="3000">
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">INSERT LEN (bp)</div>
+                                    <input type="number" id="cl-ins-len" value="500">
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">VEC MASS (ng)</div>
+                                    <input type="number" id="cl-vec-mass" value="50">
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:0.6rem; color:#666;">RATIO (I:V)</div>
+                                    <input type="number" id="cl-ratio" value="3">
+                                </div>
+                                <button class="btn btn-mini" style="height:45px;" onclick="window.calculateCloning()">CALC</button>
+                            </div>
+                            <div id="cloning-out" style="margin-top:10px; font-family:monospace; font-size:0.7rem; color:var(--accent-yellow);">
+                                Required Insert Mass: --
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-purple)">RESTRICTION ENZYME DIGEST</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <button class="btn btn-mini" onclick="window.runRestrictionDigest()">RUN DIGEST</button>
+                                <span style="font-size:0.7rem; color:#666;">Scans for EcoRI, BamHI, HindIII, NotI, XbaI</span>
+                            </div>
+                            <div id="digest-out" class="code-block" style="margin-top:10px;">
+                                Ready to analyze.
+                            </div>
+                        </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title">PRIMER DESIGNER (PCR)</span>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <button class="btn btn-mini" onclick="window.findPrimers()">FIND PRIMERS</button>
+                                <span style="font-size:0.7rem; color:#666;">Target: ~20bp, GC ~50%, Tm ~60°C</span>
+                            </div>
+                            <div id="primer-out" class="code-block" style="margin-top:10px;">
+                                Select a sequence to generate primers.
+                            </div>
+                        </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title">MOTIF SEARCH</span>
+                            <div style="display:flex; gap:10px; margin-top:10px;">
+                                <input type="text" id="motifInput" placeholder="ENTER PATTERN (e.g., AATT, G.G)" style="padding:8px;">
+                                <button class="btn btn-mini" onclick="window.findMotif()">FIND</button>
+                            </div>
+                            <div id="motif-out" style="margin-top:10px; font-family:monospace; font-size:0.7rem; color:#888;"></div>
+                        </div>
+
+                        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                            <span class="card-title" style="color:var(--accent-pink)">CRISPR SCANNER</span>
+                            <button class="btn btn-mini" style="float:right;" onclick="window.runCrisprScan()">SCAN</button>
+                            <div id="crispr-out" class="code-block" style="margin-top:10px;">
+                                Idle.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-export" class="view-section">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">DOWNLOAD CENTER</span></div>
+                    <div style="display:flex; gap:10px; flex-direction:column;">
+                        <button class="btn" onclick="window.downloadData('fasta')">DOWNLOAD SEQUENCE (.FASTA)</button>
+                        <button class="btn btn-ghost" onclick="window.downloadData('json')">DOWNLOAD REPORT (.JSON)</button>
+                        <button class="btn btn-ghost" onclick="window.downloadData('csv')">DOWNLOAD METRICS (.CSV)</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="log-panel">
+            <div class="card">
+                <div class="card-header"><span class="card-title">SYSTEM LOG</span></div>
+                <div id="sys-log" class="terminal-window">
+                    <div class="log-entry info">> SYSTEM INITIALIZED</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><span class="card-title">PROTEIN TRANSLATION (+1)</span></div>
+                <div id="mini-prot" class="code-block" style="height:150px;">
+                    ...
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        (function() {
+            // --- CONSTANTS ---
+            const codonMap = { 'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M', 'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T', 'AAC':'N', 'AAT':'N', 'AAA':'K', 'AAG':'K', 'AGC':'S', 'AGT':'S', 'AGA':'R', 'AGG':'R', 'CTA':'L', 'CTC':'L', 'CTG':'L', 'CTT':'L', 'CCA':'P', 'CCC':'P', 'CCG':'P', 'CCT':'P', 'CAC':'H', 'CAT':'H', 'CAA':'Q', 'CAG':'Q', 'CGA':'R', 'CGC':'R', 'CGG':'R', 'CGT':'R', 'GTA':'V', 'GTC':'V', 'GTG':'V', 'GTT':'V', 'GCA':'A', 'GCC':'A', 'GCG':'A', 'GCT':'A', 'GAC':'D', 'GAT':'D', 'GAA':'E', 'GAG':'E', 'GGA':'G', 'GGC':'G', 'GGG':'G', 'GGT':'G', 'TCA':'S', 'TCC':'S', 'TCG':'S', 'TCT':'S', 'TTC':'F', 'TTT':'F', 'TTA':'L', 'TTG':'L', 'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*', 'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W' };
+            
+            // Optimal E. coli codons (simplified representation of highly expressed genes)
+            const optimalCodonsEcoli = {
+                'A': 'GCG', 'C': 'TGC', 'D': 'GAT', 'E': 'GAA', 'F': 'TTC',
+                'G': 'GGC', 'H': 'CAT', 'I': 'ATC', 'K': 'AAA', 'L': 'CTG',
+                'M': 'ATG', 'N': 'AAC', 'P': 'CCG', 'Q': 'CAG', 'R': 'CGT',
+                'S': 'AGC', 'T': 'ACC', 'V': 'GTG', 'W': 'TGG', 'Y': 'TAT', '*': 'TAA'
+            };
+
+            const kdScale = { 'I':4.5, 'V':4.2, 'L':3.8, 'F':2.8, 'C':2.5, 'M':1.9, 'A':1.8, 'G':-0.4, 'T':-0.7, 'S':-0.8, 'W':-0.9, 'Y':-1.3, 'P':-1.6, 'H':-3.2, 'E':-3.5, 'Q':-3.5, 'D':-3.5, 'N':-3.5, 'K':-3.9, 'R':-4.5 };
+            
+            // Chou-Fasman Propensities [Helix, Sheet]
+            const cfScale = {
+                'A': [1.42, 0.83], 'C': [0.70, 1.19], 'D': [1.01, 0.54], 'E': [1.51, 0.37], 'F': [1.13, 1.38],
+                'G': [0.57, 0.75], 'H': [1.00, 0.87], 'I': [1.08, 1.60], 'K': [1.16, 0.74], 'L': [1.21, 1.30],
+                'M': [1.45, 1.05], 'N': [0.67, 0.89], 'P': [0.57, 0.55], 'Q': [1.11, 1.10], 'R': [0.98, 0.93],
+                'S': [0.77, 0.75], 'T': [0.83, 1.19], 'V': [1.06, 1.70], 'W': [1.08, 1.37], 'Y': [0.69, 1.47]
+            };
+
+            const pKa = { 'D': 3.9, 'E': 4.1, 'H': 6.0, 'C': 8.5, 'Y': 10.1, 'K': 10.5, 'R': 12.5, 'Term': 3.1, 'NTerm': 8.0 };
+
+            const enzymes = {
+                'EcoRI': 'GAATTC', 'BamHI': 'GGATCC', 'HindIII': 'AAGCTT', 'NotI': 'GCGGCCGC', 'XbaI': 'TCTAGA'
+            };
+            
+            // SIMULATED DATABASE
+            const REF_DB = [
+                { name: "INSULIN_HUMAN", org: "Homo sapiens", seq: "AGCCCTCCAGGACAGGCTGCATCAGAAGAGGCCATCAAGCAGGTCTGTTCCAAGGGCCTTTGCGTCAGGTGGGCTCAGGATTCCAGGGTGGCTGGACCCCAGGCCCCAGCTCTGCAGCAGGGAGGACGTGGCTGGGCTCGTGAAGCATGTGGGGGTGAGCCCAGGGGCCCCAAGGCAGGGCACCTGGCCTTCAGCCTGCCTCAGCCCTGC" },
+                { name: "P53_SUPPRESSOR", org: "Homo sapiens", seq: "GATCCACTCACAGTTTCCATAGGTCTGAATTCATCTCACTATAGCAATATGTCTGAAGCTTGTGCAAGGTCTGTTCGAATAGACTCTAGA" }, 
+                { name: "GFP_JELLYFISH", org: "A. victoria", seq: "ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTTGTCCCAATTCTTGTTGAATTAGATGGTGATGTTAATGGGCACAAATTTTCTGTCAGTGGAGAGGGTGAAGGTGATGCAACATACGGAAAACTTACCCTTAAATTTATTTGCACTACTGGAAAACTACCTGTTCCATGGCCAACACTTGTCACTACTTTC" }
+            ];
+
+            // --- STATE ---
+            let globalSeq = "";
+            let currentProtein = "";
+            let activeMode = 'hydro'; 
+            let variantData = [];
+            
+            let currentGraphData = [];
+            let currentGraphStep = 1;
+            let currentMutRefLen = 1;
+            let baseCounts = {A:0, T:0, C:0, G:0}; 
+
+            // --- ELEMENTS ---
+            const mainGraph = document.getElementById('mainGraph');
+            const mutGraph = document.getElementById('mutationGraph');
+            const dotCanvas = document.getElementById('dotPlotCanvas');
+            const gCtx = mainGraph.getContext('2d');
+            const mCtx = mutGraph.getContext('2d');
+            const dCtx = dotCanvas.getContext('2d');
+            const tooltip = document.getElementById('chartTooltip');
+
+            // --- UTILS ---
+            window.log = function(msg, type='info') {
+                const div = document.createElement('div');
+                div.className = 'log-entry ' + type;
+                div.innerHTML = `<span style="opacity:0.5">[${new Date().toLocaleTimeString().split(' ')[0]}]</span> ${msg}`;
+                const panel = document.getElementById('sys-log');
+                panel.insertBefore(div, panel.firstChild);
+            };
+
+            function cleanSeq(val) { return val.replace(/^>.*\n?/gm, '').replace(/[^a-zA-Z]/g, '').toUpperCase(); }
+            function getRevComp(seq) {
+                const map = {A:'T', T:'A', C:'G', G:'C', N:'N'};
+                return seq.split('').reverse().map(c => map[c]||c).join('');
+            }
+
+            // --- NAVIGATION ---
+            window.switchTab = function(viewId) {
+                document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+                document.getElementById('nav-' + viewId).classList.add('active');
+                document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
+                document.getElementById('view-' + viewId).classList.add('active');
+                window.log(`SWITCHED VIEW: ${viewId.toUpperCase()}`);
+                if(viewId === 'dashboard') requestAnimationFrame(window.refreshVisuals);
+                if(viewId === 'mutation') requestAnimationFrame(() => drawMutationMap(Math.max(globalSeq.length, 100)));
+                if(viewId === 'compare') requestAnimationFrame(drawDotPlot);
+            };
+
+            window.setGraphMode = function(mode) {
+                activeMode = mode;
+                document.getElementById('btn-hydro').className = mode === 'hydro' ? 'btn btn-mini active' : 'btn btn-mini';
+                document.getElementById('btn-skew').className = mode === 'skew' ? 'btn btn-mini active' : 'btn btn-mini';
+                document.getElementById('btn-struct').className = mode === 'structure' ? 'btn btn-mini active' : 'btn btn-mini';
+                window.refreshVisuals();
+            };
+
+            window.clearData = function() {
+                document.getElementById('dnaInput').value = "";
+                globalSeq = "";
+                document.getElementById('mini-prot').innerText = "...";
+                document.getElementById('m-len').innerText = "0 bp";
+                baseCounts = {A:0, T:0, C:0, G:0};
+                window.refreshVisuals();
+                window.log("DATA CLEARED", "warn");
+            }
+
+            window.generateRandomSeq = function() {
+                const bases = ['A','T','C','G'];
+                let s = "";
+                for(let i=0; i<300; i++) s += bases[Math.floor(Math.random()*4)];
+                document.getElementById('dnaInput').value = s;
+                window.processData();
+            }
+
+            // --- MAIN ANALYSIS ---
+            window.processData = function() {
+                const raw = document.getElementById('dnaInput').value;
+                if(!raw) return;
+                const seq = cleanSeq(raw);
+                globalSeq = seq;
+                
+                if(!seq) return;
+
+                // Metrics
+                document.getElementById('m-len').innerText = seq.length.toLocaleString() + " bp";
+                let counts = {A:0, T:0, C:0, G:0};
+                for(let char of seq) { if(counts[char] !== undefined) counts[char]++; }
+                baseCounts = counts;
+                
+                const max = Math.max(counts.A, counts.T, counts.C, counts.G, 1);
+                
+                const setupBar = (id, base, count) => {
+                    const el = document.getElementById(id);
+                    el.style.height = (count/max*100) + "%";
+                    el.onmousemove = (e) => window.showBaseTooltip(e, base, count, seq.length);
+                    el.onmouseout = () => { document.getElementById('chartTooltip').style.display = 'none'; };
+                };
+
+                setupBar('bar-a', 'ADENINE', counts.A);
+                setupBar('bar-t', 'THYMINE', counts.T);
+                setupBar('bar-c', 'CYTOSINE', counts.C);
+                setupBar('bar-g', 'GUANINE', counts.G);
+
+                const gc = ((counts.G+counts.C)/seq.length)*100;
+                document.getElementById('m-gc').innerText = gc.toFixed(1) + "%";
+                document.getElementById('m-tm').innerText = (64.9 + 41*(counts.G+counts.C-16.4)/seq.length).toFixed(1) + "°C";
+                document.getElementById('m-mw').innerText = ((seq.length*650)/1000).toFixed(1) + " kDa";
+
+                currentProtein = translateFrame(seq, 0);
+                document.getElementById('mini-prot').innerText = currentProtein;
+                
+                const piVal = calculatePI(currentProtein);
+                document.getElementById('m-pi').innerText = piVal.toFixed(2);
+
+                analyzeCodons();
+                window.log(`ANALYSIS COMPLETE: ${seq.length} BP`, 'success');
+                window.refreshVisuals();
+            };
+            
+            window.showBaseTooltip = function(e, base, count, total) {
+                const tt = document.getElementById('chartTooltip');
+                const pct = ((count/total)*100).toFixed(1);
+                tt.style.display = 'block';
+                tt.style.left = (e.clientX + 10) + 'px';
+                tt.style.top = (e.clientY + 10) + 'px';
+                tt.innerHTML = `<span style="color:var(--accent-cyan)">${base}</span><br>COUNT: ${count}<br>FREQ: ${pct}%`;
+            };
+
+            function translateFrame(seq, offset) {
+                let p = "";
+                for(let i=offset; i<seq.length-2; i+=3) p += codonMap[seq.substr(i,3)] || "?";
+                return p;
+            }
+
+            function analyzeCodons() {
+                const map = {};
+                for(let i=0; i<globalSeq.length-2; i+=3) {
+                    const c = globalSeq.substr(i,3);
+                    map[c] = (map[c] || 0) + 1;
+                }
+                const out = document.getElementById('codon-output');
+                out.innerHTML = "";
+                
+                const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+                if(sorted.length === 0) { out.innerHTML = '<div style="grid-column:1/-1; color:#444; text-align:center; padding:20px;">No Data</div>'; return;}
+
+                sorted.forEach(([codon, count]) => {
+                    out.innerHTML += `<div class="codon-cell"><span>${codon}</span>${count}</div>`;
+                });
+            }
+
+            function calculatePI(prot) {
+                if(!prot) return 0;
+                let min = 0, max = 14;
+                for(let i=0; i<10; i++) { 
+                    let mid = (min+max)/2;
+                    let charge = 0;
+                    charge += 1 / (1 + Math.pow(10, mid - pKa.NTerm));
+                    for(let aa of prot) {
+                        if(pKa[aa]) {
+                            if(aa === 'D' || aa === 'E' || aa === 'C' || aa === 'Y') charge -= 1 / (1 + Math.pow(10, pKa[aa] - mid));
+                            else if (aa === 'H' || aa === 'K' || aa === 'R') charge += 1 / (1 + Math.pow(10, mid - pKa[aa]));
+                        }
+                    }
+                    charge -= 1 / (1 + Math.pow(10, pKa.Term - mid));
+                    if(charge > 0) min = mid; else max = mid;
+                }
+                return (min+max)/2;
+            }
+
+            // --- NEW: CPG ISLAND DETECTOR ---
+            window.runCpGScan = function() {
+                if(!globalSeq || globalSeq.length < 50) return;
+                const out = document.getElementById('cpg-results');
+                out.innerHTML = "";
+                
+                const winSize = 100; // standard small window
+                const step = 10;
+                let found = 0;
+
+                for(let i=0; i <= globalSeq.length - winSize; i+=step) {
+                    const windowStr = globalSeq.substr(i, winSize);
+                    let cCount = 0, gCount = 0, cgCount = 0;
+                    
+                    for(let j=0; j<winSize; j++) {
+                        if(windowStr[j] === 'C') cCount++;
+                        if(windowStr[j] === 'G') gCount++;
+                        if(j < winSize-1 && windowStr[j] === 'C' && windowStr[j+1] === 'G') cgCount++;
+                    }
+                    
+                    const gcPct = ((cCount + gCount) / winSize) * 100;
+                    // Obs/Exp = Count(CG) / (Count(C) * Count(G)) * windowLength
+                    const obsExp = (cCount === 0 || gCount === 0) ? 0 : (cgCount * winSize) / (cCount * gCount);
+
+                    if(gcPct > 50 && obsExp > 0.6) {
+                        found++;
+                        out.innerHTML += `<div style="margin-bottom:4px; padding-bottom:2px; border-bottom:1px solid #222;">
+                            <span style="color:var(--accent-yellow)">ISLAND AT ${i+1}-${i+winSize}</span> | 
+                            GC: ${gcPct.toFixed(1)}% | 
+                            Obs/Exp: ${obsExp.toFixed(2)}
+                        </div>`;
+                    }
+                }
+                
+                if(found===0) out.innerHTML = "No CpG islands detected based on strict criteria (GC>50%, Obs/Exp>0.6).";
+                window.log(`CPG SCAN: FOUND ${found} POTENTIAL ISLANDS`);
+            };
+
+            // --- NEW: 6-FRAME TRANSLATION ---
+            window.runSixFrameTranslation = function() {
+                if(!globalSeq) return;
+                const out = document.getElementById('six-frame-out');
+                const revSeq = getRevComp(globalSeq);
+                
+                let html = "";
+                for(let i=0; i<3; i++) {
+                    const prot = translateFrame(globalSeq, i);
+                    html += `<span style="color:var(--accent-green)">+${i+1} FRAME:</span>\n${prot}\n\n`;
+                }
+                for(let i=0; i<3; i++) {
+                    const prot = translateFrame(revSeq, i);
+                    html += `<span style="color:var(--accent-pink)">-${i+1} FRAME:</span>\n${prot}\n\n`;
+                }
+                out.innerHTML = html;
+                window.log(`6-FRAME TRANSLATION EXECUTED`);
+            };
+
+            // --- NEW: CODON OPTIMIZER ---
+            window.runCodonOptimization = function() {
+                if(!currentProtein) return;
+                const out = document.getElementById('optimizer-out');
+                
+                let optSeq = "";
+                for(let aa of currentProtein) {
+                    optSeq += optimalCodonsEcoli[aa] || "NNN";
+                }
+                
+                out.innerHTML = `> OPTIMIZED_SEQ_ECOLI (Len: ${optSeq.length})\n${optSeq}`;
+                window.log(`CODON OPTIMIZATION COMPLETE (E. COLI)`);
+            };
+
+            // --- RESTRICTION DIGEST ---
+            window.runRestrictionDigest = function() {
+                if(!globalSeq) return;
+                const out = document.getElementById('digest-out');
+                out.innerHTML = "";
+                let foundAny = false;
+
+                Object.keys(enzymes).forEach(enz => {
+                    const site = enzymes[enz];
+                    let count = 0;
+                    let positions = [];
+                    let pos = globalSeq.indexOf(site);
+                    while(pos !== -1) { count++; positions.push(pos+1); pos = globalSeq.indexOf(site, pos+1); }
+
+                    if(count > 0) {
+                        foundAny = true;
+                        out.innerHTML += `<div style="margin-bottom:5px; border-bottom:1px solid #222; padding-bottom:2px;">
+                            <span style="color:var(--accent-purple)">${enz}</span> (${site})<br>
+                            Cuts: ${count} | Fragments: ${count+1}<br>
+                            Pos: ${positions.slice(0,5).join(', ')}${positions.length>5?'...':''}
+                        </div>`;
+                    }
+                });
+                if(!foundAny) out.innerHTML = "No cut sites found for selected enzymes.";
+                window.log(`DIGEST COMPLETE`);
+            };
+
+            // --- CLONING CALCULATOR ---
+            window.calculateCloning = function() {
+                const vecLen = parseFloat(document.getElementById('cl-vec-len').value);
+                const insLen = parseFloat(document.getElementById('cl-ins-len').value);
+                const vecMass = parseFloat(document.getElementById('cl-vec-mass').value);
+                const ratio = parseFloat(document.getElementById('cl-ratio').value);
+                
+                if(!vecLen || !insLen || !vecMass || !ratio) return;
+                const insertMass = (insLen / vecLen) * vecMass * ratio;
+                document.getElementById('cloning-out').innerHTML = `REQUIRED INSERT MASS: <span style="color:#fff; font-weight:bold;">${insertMass.toFixed(2)} ng</span>`;
+            };
+
+            // --- VARIANT CALLER ---
+            window.runVariantCaller = function() {
+                const refRaw = document.getElementById('refInput').value;
+                const ref = cleanSeq(refRaw);
+                const sample = globalSeq; 
+                
+                if(!ref || !sample) return;
+                
+                const tbody = document.getElementById('variant-results');
+                tbody.innerHTML = "";
+                variantData = [];
+
+                let matches = 0;
+                const limit = Math.min(ref.length, sample.length);
+                
+                for(let i=0; i<limit; i++) {
+                    if(ref[i] === sample[i]) {
+                        matches++;
+                    } else {
+                        variantData.push({ pos: i+1, ref: ref[i], alt: sample[i] });
+                        tbody.innerHTML += `<tr><td class="mut-pos">${i+1}</td><td class="mut-ref">${ref[i]}</td><td class="mut-alt">${sample[i]}</td><td style="font-size:0.65rem; color:#666">SNP</td></tr>`;
+                    }
+                }
+
+                if(variantData.length === 0) tbody.innerHTML = "<tr><td colspan='4' style='text-align:center;'>NO VARIANTS DETECTED</td></tr>";
+
+                const identity = (matches / Math.max(ref.length, sample.length)) * 100;
+                document.getElementById('mut-identity').innerText = `IDENTITY: ${identity.toFixed(2)}%`;
+                
+                drawMutationMap(ref.length);
+                window.log(`FOUND ${variantData.length} VARIANTS`, 'success');
+            };
+
+            // --- HOMOLOGY SEARCH & ALIGNMENT VIEWER ---
+            window.runHomologySearch = function() {
+                if(!globalSeq) return;
+                const tbody = document.getElementById('homology-results');
+                tbody.innerHTML = "";
+                
+                let bestMatchScore = -1;
+                let bestMatchEntry = null;
+
+                REF_DB.forEach(entry => {
+                    let match = 0;
+                    const minL = Math.min(entry.seq.length, globalSeq.length);
+                    for(let i=0; i<minL; i++) {
+                        if(entry.seq[i] === globalSeq[i]) match++;
+                    }
+                    const pct = ((match/Math.max(entry.seq.length, globalSeq.length))*100).toFixed(1);
+                    
+                    if(match > bestMatchScore) {
+                        bestMatchScore = match;
+                        bestMatchEntry = entry;
+                    }
+
+                    let cls = pct > 80 ? 'match-high' : (pct > 50 ? 'match-med' : 'match-low');
+                    
+                    tbody.innerHTML += `<tr>
+                        <td>${entry.name}</td><td style="font-style:italic">${entry.org}</td>
+                        <td class="${cls}">${pct}%</td><td>${match * 2}</td>
+                    </tr>`;
+                });
+                
+                window.log("DATABASE ALIGNMENT COMPLETED");
+                drawDotPlot();
+                
+                // NEW: Generate Pairwise Alignment String for best hit
+                if(bestMatchEntry) generatePairwiseAlignment(bestMatchEntry.seq, globalSeq);
+            };
+
+            function generatePairwiseAlignment(ref, query) {
+                const viewer = document.getElementById('alignment-viewer');
+                let html = "";
+                
+                // Break into 60-char blocks
+                const blockLen = 60;
+                const limit = Math.max(ref.length, query.length);
+                
+                for(let i=0; i<limit; i+=blockLen) {
+                    const rChunk = ref.substring(i, i+blockLen);
+                    const qChunk = query.substring(i, i+blockLen);
+                    
+                    let matchStr = "";
+                    let rHtml = "", qHtml = "";
+                    
+                    for(let j=0; j<Math.max(rChunk.length, qChunk.length); j++) {
+                        const rChar = rChunk[j] || '-';
+                        const qChar = qChunk[j] || '-';
+                        
+                        if(rChar === qChar && rChar !== '-') {
+                            matchStr += "|";
+                            rHtml += `<span class="aln-match">${rChar}</span>`;
+                            qHtml += `<span class="aln-match">${qChar}</span>`;
+                        } else {
+                            matchStr += " ";
+                            rHtml += `<span class="aln-mismatch">${rChar}</span>`;
+                            qHtml += `<span class="aln-mismatch">${qChar}</span>`;
+                        }
+                    }
+                    
+                    const pStart = String(i+1).padStart(4, '0');
+                    html += `REF  ${pStart}  ${rHtml}\n`;
+                    html += `          ${matchStr}\n`;
+                    html += `SAMP ${pStart}  ${qHtml}\n\n`;
+                }
+                
+                viewer.innerHTML = html;
+            }
+
+            // --- ORF FINDER ---
+            window.findORF = function() {
+                if(!globalSeq) return;
+                const out = document.getElementById('orf-results');
+                out.innerHTML = "";
+                
+                let found = 0;
+                const stops = ['TAA', 'TAG', 'TGA'];
+                
+                for(let frame=0; frame<3; frame++) {
+                    const chunks = globalSeq.slice(frame).match(/.{1,3}/g) || [];
+                    let start = -1;
+                    
+                    chunks.forEach((codon, idx) => {
+                        if(codon === 'ATG' && start === -1) {
+                            start = idx * 3 + frame;
+                        } else if(stops.includes(codon) && start !== -1) {
+                            const end = idx * 3 + frame + 3;
+                            if((end - start) > 50) { 
+                                found++;
+                                out.innerHTML += `<div style="margin-bottom:2px; color:var(--accent-cyan);">Frame ${frame+1}: ${start+1} - ${end} (${end-start}bp)</div>`;
+                            }
+                            start = -1;
+                        }
+                    });
+                }
+                if(found === 0) out.innerHTML = "No significant ORFs found.";
+                window.log(`ORF SCAN: ${found} REGIONS IDENTIFIED`);
+            };
+
+            // --- PRIMER DESIGNER ---
+            window.findPrimers = function() {
+                if(!globalSeq || globalSeq.length < 50) return;
+                const out = document.getElementById('primer-out');
+                out.innerHTML = "";
+                
+                const primers = [];
+                for(let i=0; i<globalSeq.length - 20; i++) {
+                    const sub = globalSeq.substr(i, 20);
+                    let gc = 0;
+                    for(let b of sub) { if(b==='G'||b==='C') gc++; }
+                    const gcPct = (gc/20)*100;
+                    
+                    if(gcPct >= 40 && gcPct <= 60) {
+                        const tm = 4*gc + 2*(20-gc);
+                        if(tm >= 55 && tm <= 65) {
+                            primers.push({ pos: i+1, seq: sub, tm: tm, gc: gcPct });
+                        }
+                    }
+                }
+                
+                const selected = [];
+                if(primers.length > 0) {
+                    const step = Math.floor(primers.length / 5) || 1;
+                    for(let i=0; i<primers.length; i+=step) {
+                        selected.push(primers[i]);
+                        if(selected.length >= 5) break;
+                    }
+                }
+
+                if(selected.length === 0) out.innerHTML = "No suitable primers found.";
+                else selected.forEach((p, idx) => {
+                    out.innerHTML += `<div style="margin-bottom:5px; border-bottom:1px solid #222; padding-bottom:2px;">
+                        <span style="color:var(--accent-cyan)">P${idx+1}</span> (${p.pos}): ${p.seq}<br>
+                        <span style="color:#666">Tm:${p.tm}°C GC:${p.gc}%</span>
+                    </div>`;
+                });
+                window.log(`GENERATED ${selected.length} PRIMERS`);
+            }
+
+            // --- GRAPHICS: DOT PLOT ---
+            function drawDotPlot() {
+                if(!dotCanvas.offsetWidth) return;
+                dotCanvas.width = dotCanvas.offsetWidth;
+                dotCanvas.height = dotCanvas.offsetHeight;
+                const w = dotCanvas.width, h = dotCanvas.height;
+                
+                dCtx.fillStyle = "#000"; dCtx.fillRect(0,0,w,h);
+                
+                const seq1 = globalSeq;
+                const refVal = document.getElementById('refInput').value;
+                const seq2 = refVal ? cleanSeq(refVal) : globalSeq;
+                
+                if(!seq1 || !seq2) {
+                     dCtx.fillStyle = "#333"; dCtx.fillText("NO DATA", 10, 20);
+                     return;
+                }
+
+                const step = Math.max(1, Math.floor(Math.max(seq1.length, seq2.length) / 300));
+                dCtx.fillStyle = "#0aff60";
+                
+                for(let x=0; x<seq1.length; x+=step) {
+                    for(let y=0; y<seq2.length; y+=step) {
+                        if(seq1[x] === seq2[y]) {
+                            const cx = (x / seq1.length) * w, cy = (y / seq2.length) * h;
+                            dCtx.fillRect(cx, cy, 1.5, 1.5);
+                        }
+                    }
+                }
+            }
+
+            // --- EDITOR ACTIONS ---
+            window.editorAction = function(action) {
+                if(!globalSeq) return;
+                let res = "";
+                if(action === 'rev') res = globalSeq.split('').reverse().join('');
+                else if(action === 'comp') {
+                    const map = {A:'T', T:'A', C:'G', G:'C', N:'N'};
+                    res = globalSeq.split('').map(c => map[c]||c).join('');
+                } 
+                else if(action === 'revcomp') res = getRevComp(globalSeq);
+                else if(action === 'rna') res = globalSeq.replace(/T/g, 'U');
+                
+                document.getElementById('dnaInput').value = res;
+                window.log(`APPLIED: ${action.toUpperCase()}`);
+                window.processData();
+            };
+
+            window.findMotif = function() {
+                const pat = document.getElementById('motifInput').value.toUpperCase();
+                if(!pat || !globalSeq) return;
+                try {
+                    const regex = new RegExp(pat, 'g');
+                    const matches = [...globalSeq.matchAll(regex)];
+                    const out = document.getElementById('motif-out');
+                    out.innerText = `Found ${matches.length} occurrences. Locations: ${matches.map(m => m.index+1).slice(0, 5).join(', ')}${matches.length>5?'...':''}`;
+                } catch(e) { window.log("INVALID REGEX", "warn"); }
+            };
+
+            window.runCrisprScan = function() {
+                if(!globalSeq) return;
+                const out = document.getElementById('crispr-out');
+                out.innerHTML = "";
+                let count = 0;
+                for(let i=0; i<globalSeq.length-2; i++) {
+                    if(globalSeq[i+1] === 'G' && globalSeq[i+2] === 'G' && i > 20) {
+                        const guide = globalSeq.substring(i-20, i);
+                        out.innerHTML += `<div style="color:var(--accent-cyan); margin-bottom:2px;">Pos ${i}: ${guide} <span style="color:#fff">NGG</span></div>`;
+                        count++;
+                    }
+                }
+                window.log(`CRISPR: ${count} CANDIDATE SITES`);
+            };
+
+            // --- GRAPHICS: MUTATION MAP ---
+            function drawMutationMap(refLen) {
+                if(!mutGraph.offsetWidth) return;
+                mutGraph.width = mutGraph.offsetWidth; mutGraph.height = mutGraph.offsetHeight;
+                const w = mutGraph.width, h = mutGraph.height;
+                currentMutRefLen = refLen;
+
+                mCtx.fillStyle = "#000"; mCtx.fillRect(0,0,w,h);
+                const y = h/2;
+                mCtx.fillStyle = "#222"; mCtx.fillRect(10, y-5, w-20, 10);
+                
+                variantData.forEach(v => {
+                    const x = 10 + ((v.pos / refLen) * (w-20));
+                    mCtx.fillStyle = "#ff003c"; mCtx.globalAlpha = 0.8;
+                    mCtx.fillRect(x, y-15, 2, 30);
+                });
+                mCtx.globalAlpha = 1;
+            }
+
+            mutGraph.onmousemove = function(e) {
+                const rect = mutGraph.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const w = mutGraph.width - 20;
+                const estPos = Math.floor(((mx - 10) / w) * currentMutRefLen);
+                const hit = variantData.find(v => Math.abs(v.pos - estPos) < (currentMutRefLen/50));
+                
+                if(hit) {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX + 10) + 'px'; tooltip.style.top = (e.clientY + 10) + 'px';
+                    tooltip.innerHTML = `<span style='color:#fff'>POS: ${hit.pos}</span><br>REF: ${hit.ref}<br><span style='color:var(--accent-pink)'>ALT: ${hit.alt}</span>`;
+                    mutGraph.style.cursor = 'pointer';
+                } else {
+                    tooltip.style.display = 'none'; mutGraph.style.cursor = 'default';
+                }
+            };
+            mutGraph.onmouseout = () => tooltip.style.display = 'none';
+
+            // --- GRAPHICS: MAIN CHART ---
+            window.refreshVisuals = function() {
+                if(!mainGraph.offsetWidth) return;
+                mainGraph.width = mainGraph.offsetWidth; mainGraph.height = mainGraph.offsetHeight;
+                
+                const ctx = gCtx, w = mainGraph.width, h = mainGraph.height;
+                
+                ctx.fillStyle = "#080808"; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 1; ctx.beginPath();
+                for(let i=0; i<w; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,h); }
+                for(let i=0; i<h; i+=40) { ctx.moveTo(0,i); ctx.lineTo(w,i); }
+                ctx.stroke();
+
+                if(globalSeq.length === 0) {
+                    ctx.fillStyle = "#333"; ctx.font = "12px monospace";
+                    ctx.fillText("NO SEQUENCE LOADED", w/2-50, h/2);
+                    currentGraphData = []; return;
+                }
+
+                const data = [], data2 = []; 
+                const windowSize = 9;
+                
+                if(activeMode === 'hydro') {
+                    for(let i=0; i<currentProtein.length - windowSize; i++) {
+                        let sum = 0;
+                        for(let j=0; j<windowSize; j++) sum += kdScale[currentProtein[i+j]] || 0;
+                        data.push(sum/windowSize);
+                    }
+                } else if (activeMode === 'skew') {
+                    for(let i=0; i<globalSeq.length - windowSize; i++) {
+                        let g = 0, c = 0;
+                        for(let j=0; j<windowSize; j++) {
+                            if(globalSeq[i+j] === 'G') g++;
+                            if(globalSeq[i+j] === 'C') c++;
+                        }
+                        data.push((g-c)/(g+c) || 0);
+                    }
+                } else if (activeMode === 'structure') {
+                    for(let i=0; i<currentProtein.length - 6; i++) {
+                        let hSum = 0, sSum = 0;
+                        for(let j=0; j<6; j++) {
+                            const aa = currentProtein[i+j];
+                            if(cfScale[aa]) { hSum += cfScale[aa][0]; sSum += cfScale[aa][1]; }
+                        }
+                        data.push(hSum/6); data2.push(sSum/6);
+                    }
+                }
+                
+                currentGraphData = data; 
+                const maxVal = Math.max(...data.map(Math.abs), ...(data2.length?data2.map(Math.abs):[0])) || 1.5;
+                const step = w / (data.length || 1);
+                currentGraphStep = step;
+                const mid = h / 2;
+                
+                const drawLine = (dataset, color) => {
+                    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+                    for(let i=0; i<dataset.length; i++) {
+                        const norm = (dataset[i] / maxVal) * (h/2 - 20);
+                        const x = i * step, y = mid - norm; 
+                        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                    }
+                    ctx.stroke();
+                };
+
+                if(activeMode === 'structure') {
+                     drawLine(data, '#0aff60'); drawLine(data2, '#ff003c');
+                     ctx.fillStyle = '#0aff60'; ctx.fillText("ALPHA HELIX", 10, 20);
+                     ctx.fillStyle = '#ff003c'; ctx.fillText("BETA SHEET", 10, 35);
+                } else {
+                     const color = activeMode === 'hydro' ? '#0aff60' : '#bd00ff';
+                     drawLine(data, color);
+                }
+                ctx.strokeStyle = "#444"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+            };
+
+            mainGraph.onmousemove = function(e) {
+                if(currentGraphData.length === 0) return;
+                const rect = mainGraph.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                if(currentGraphStep <= 0 || !isFinite(currentGraphStep)) return;
+                const idx = Math.floor(mx / currentGraphStep);
+                
+                if(currentGraphData[idx] !== undefined) {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX + 10) + 'px'; tooltip.style.top = (e.clientY + 10) + 'px';
+                    tooltip.innerText = `POS: ${idx}\nVAL: ${currentGraphData[idx].toFixed(2)}`;
+                } else tooltip.style.display = 'none';
+            };
+            mainGraph.onmouseout = () => tooltip.style.display = 'none';
+
+            // --- ANIMATION LOOPS ---
+            const bgC = document.getElementById('bgCanvas'), bgCtx = bgC.getContext('2d');
+            const hC = document.getElementById('helixCanvas'), hCtx = hC.getContext('2d');
+            let time = 0;
+
+            function animLoop() {
+                time += 0.05;
+                if(bgC.width !== window.innerWidth) { bgC.width = window.innerWidth; bgC.height = window.innerHeight; }
+                bgCtx.clearRect(0,0,bgC.width, bgC.height);
+                bgCtx.fillStyle = `rgba(0, 240, 255, 0.05)`;
+                for(let i=0; i<20; i++) {
+                    const y = (time * 10 + i * 50) % bgC.height;
+                    bgCtx.fillRect(0, y, bgC.width, 1);
+                }
+
+                if(hC.offsetWidth !== hC.width) { hC.width = hC.offsetWidth; hC.height = hC.offsetHeight; }
+                const hw = hC.width, hh = hC.height;
+                hCtx.fillStyle = "#000"; hCtx.fillRect(0,0,hw,hh);
+                
+                const points = 20, gap = hw / points;
+                for(let i=0; i<points; i++) {
+                    const x = i * gap + 10;
+                    const yOffset1 = Math.sin(i * 0.5 + time) * 30, yOffset2 = Math.sin(i * 0.5 + time + Math.PI) * 30;
+                    const cy = hh / 2;
+                    hCtx.beginPath(); hCtx.arc(x, cy + yOffset1, 3, 0, Math.PI*2); hCtx.fillStyle = "#00f0ff"; hCtx.fill();
+                    hCtx.beginPath(); hCtx.arc(x, cy + yOffset2, 3, 0, Math.PI*2); hCtx.fillStyle = "#ff003c"; hCtx.fill();
+                    hCtx.strokeStyle = "rgba(255,255,255,0.1)";
+                    hCtx.beginPath(); hCtx.moveTo(x, cy + yOffset1); hCtx.lineTo(x, cy + yOffset2); hCtx.stroke();
+                }
+                requestAnimationFrame(animLoop);
+            }
+            animLoop();
+
+            // --- DATA LOADING & EXPORT ---
+            window.loadSample = function(type) {
+                if(type === 'insulin') {
+                    document.getElementById('dnaInput').value = REF_DB[0].seq;
+                    window.processData();
+                } else if(type === 'mutant') {
+                    let s = REF_DB[0].seq.split('');
+                    s[10] = 'T'; s[25] = 'G'; s[50] = 'A'; 
+                    globalSeq = s.join('');
+                    document.getElementById('dnaInput').value = globalSeq;
+                    document.getElementById('refInput').value = REF_DB[0].seq;
+                    window.processData();
+                    window.runVariantCaller();
+                } else if(type === 'cpg') {
+                    // Generate a sequence with an artificial CpG island
+                    let s = "ATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGC";
+                    let island = "CGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCG";
+                    document.getElementById('dnaInput').value = s + island + s;
+                    window.processData();
+                    window.runCpGScan();
+                }
+            };
+
+            window.downloadData = function(format) {
+                if(!globalSeq) return;
+                let content = "", mime = "text/plain", name = "helix_export";
+                if(format === 'fasta') { content = `>HELIX_EXPORT_SEQ_${new Date().toISOString()}\n${globalSeq}`; name += ".fasta"; }
+                else if(format === 'json') {
+                    const obj = { sequence: globalSeq, length: globalSeq.length, protein: currentProtein, date: new Date() };
+                    content = JSON.stringify(obj, null, 2); mime = "application/json"; name += ".json";
+                } else if(format === 'csv') {
+                    content = `ID,Length,GC_Percent\nHELIX_001,${globalSeq.length},${document.getElementById('m-gc').innerText}`;
+                    name += ".csv"; mime = "text/csv";
+                }
+                const blob = new Blob([content], {type: mime});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name; a.click();
+            };
+
+            window.addEventListener('resize', () => {
+                window.refreshVisuals();
+                if(variantData.length) drawMutationMap(globalSeq.length);
+                if(document.getElementById('view-compare').classList.contains('active')) drawDotPlot();
+            });
+
+        })();
+    </script>
+</body>
+</html>

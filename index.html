@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HELIX | VOID INTERFACE v15.0</title>
+    <title>HELIX | VOID INTERFACE v16.0</title>
     <style>
         :root {
             /* THEME: Deep Space HUD */
@@ -42,7 +42,7 @@
         /* --- BACKGROUND FX --- */
         #bgCanvas {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1; pointer-events: none; opacity: 1.0; /* Fixed: Increased opacity to make it clearly visible */
+            z-index: 1; pointer-events: none; opacity: 0.5;
         }
 
         /* --- SIDEBAR --- */
@@ -263,8 +263,18 @@
             border: 1px solid #222;
             color: #aaa;
         }
+        
+        /* RASMOL AMINO ACID COLORING */
+        .aa-acidic { color: #ff4d4d; font-weight: bold; } /* D, E (Red) */
+        .aa-basic { color: #3399ff; font-weight: bold; }  /* K, R, H (Blue) */
+        .aa-polar { color: #d9b3ff; } /* S, T, N, Q (Purple/Light) */
+        .aa-cys { color: #ffff00; font-weight: bold; }    /* C, M (Yellow) */
+        .aa-nonpolar { color: #888; }                     /* G, A, V, L, I, P, F, Y, W (Grey) */
+        .aa-stop { color: #fff; background-color: #ff003c; padding: 0 2px; }
+
         .aln-match { color: var(--accent-green); font-weight: bold; }
         .aln-mismatch { color: var(--accent-pink); }
+        .aln-gap { color: #666; }
 
         /* --- CODON GRID --- */
         .codon-grid {
@@ -286,7 +296,7 @@
 
     <aside>
         <div class="brand">HELIX<span>OS</span></div>
-        <div class="subtitle">BIO-COMPUTATIONAL ENGINE V15.0</div>
+        <div class="subtitle">BIO-COMPUTATIONAL ENGINE V16.0</div>
         
         <div class="helix-container">
             <canvas id="helixCanvas"></canvas>
@@ -465,6 +475,16 @@
                     </div>
 
                     <div class="card span-full">
+                        <div class="card-header"><span class="card-title">SMITH-WATERMAN LOCAL ALIGNMENT</span></div>
+                        <p style="font-size:0.7rem; color:#666; margin-bottom:10px;">Rigorous local alignment against a custom reference.</p>
+                        <textarea id="sw-ref-input" placeholder="> Paste Reference Sequence for SW Alignment..." style="height:80px; margin-bottom:10px;"></textarea>
+                        <button class="btn btn-mini" style="border-color:var(--accent-purple); color:var(--accent-purple);" onclick="window.runSmithWaterman()">RUN ALIGNMENT</button>
+                        <div id="sw-results" class="alignment-view" style="margin-top:10px; height:150px;">
+                            Waiting for input...
+                        </div>
+                    </div>
+
+                    <div class="card span-full">
                          <div class="card-header"><span class="card-title">DOT PLOT MATRIX</span></div>
                          <p style="font-size:0.7rem; color:#666; margin-bottom:10px;">Visualizes similarity. Comparing: Sample vs. Reference (or Self).</p>
                          <div class="canvas-container" style="height:300px;">
@@ -627,7 +647,7 @@
             
             <div class="card">
                 <div class="card-header"><span class="card-title">PROTEIN TRANSLATION (+1)</span></div>
-                <div id="mini-prot" class="code-block" style="height:150px;">
+                <div id="mini-prot" class="code-block" style="height:150px; line-height: 1.6;">
                     ...
                 </div>
             </div>
@@ -674,6 +694,7 @@
             // --- STATE ---
             let globalSeq = "";
             let currentProtein = "";
+            let currentProteinRaw = "";
             let activeMode = 'hydro'; 
             let variantData = [];
             
@@ -700,7 +721,11 @@
                 panel.insertBefore(div, panel.firstChild);
             };
 
-            function cleanSeq(val) { return val.replace(/^>.*\n?/gm, '').replace(/[^a-zA-Z]/g, '').toUpperCase(); }
+            // Improved FASTA Parser
+            function cleanSequence(seq) {
+                // Remove FASTA header lines (starting with >) and remove all non-alpha characters
+                return seq.replace(/^>.*\n?/gm, '').replace(/[^a-zA-Z]/g, '').toUpperCase();
+            }
             function getRevComp(seq) {
                 const map = {A:'T', T:'A', C:'G', G:'C', N:'N'};
                 return seq.split('').reverse().map(c => map[c]||c).join('');
@@ -729,7 +754,7 @@
             window.clearData = function() {
                 document.getElementById('dnaInput').value = "";
                 globalSeq = "";
-                document.getElementById('mini-prot').innerText = "...";
+                document.getElementById('mini-prot').innerHTML = "...";
                 document.getElementById('m-len').innerText = "0 bp";
                 baseCounts = {A:0, T:0, C:0, G:0};
                 window.refreshVisuals();
@@ -748,7 +773,7 @@
             window.processData = function() {
                 const raw = document.getElementById('dnaInput').value;
                 if(!raw) return;
-                const seq = cleanSeq(raw);
+                const seq = cleanSequence(raw);
                 globalSeq = seq;
                 
                 if(!seq) return;
@@ -778,8 +803,11 @@
                 document.getElementById('m-tm').innerText = (64.9 + 41*(counts.G+counts.C-16.4)/seq.length).toFixed(1) + "°C";
                 document.getElementById('m-mw').innerText = ((seq.length*650)/1000).toFixed(1) + " kDa";
 
-                currentProtein = translateFrame(seq, 0);
-                document.getElementById('mini-prot').innerText = currentProtein;
+                // Translation with RasMol Colors
+                const { protein, proteinHtml } = translateFrameColored(seq, 0);
+                currentProtein = protein;
+                currentProteinRaw = protein; // Store raw for other tools
+                document.getElementById('mini-prot').innerHTML = proteinHtml; // Use innerHTML for colors
                 
                 const piVal = calculatePI(currentProtein);
                 document.getElementById('m-pi').innerText = piVal.toFixed(2);
@@ -805,6 +833,26 @@
                 let p = "";
                 for(let i=offset; i<seq.length-2; i+=3) p += codonMap[seq.substr(i,3)] || "?";
                 return p;
+            }
+
+            // New: Translation with RasMol coloring
+            function translateFrameColored(seq, offset) {
+                let p = "";
+                let html = "";
+                for(let i=offset; i<seq.length-2; i+=3) {
+                    const aa = codonMap[seq.substr(i,3)] || "?";
+                    p += aa;
+                    
+                    let cls = 'aa-nonpolar';
+                    if (['D','E'].includes(aa)) cls = 'aa-acidic';
+                    else if (['K','R','H'].includes(aa)) cls = 'aa-basic';
+                    else if (['S','T','N','Q'].includes(aa)) cls = 'aa-polar';
+                    else if (['C','M'].includes(aa)) cls = 'aa-cys';
+                    else if (aa === '*') cls = 'aa-stop';
+                    
+                    html += `<span class="${cls}">${aa}</span>`;
+                }
+                return { protein: p, proteinHtml: html };
             }
 
             function analyzeCodons() {
@@ -854,6 +902,92 @@
                 // Assumes pairs of cysteines form half-cystines (disulfide bonds) for baseline max calculation
                 return (numW * 5500) + (numY * 1490) + (numC * 125);
             }
+
+            // --- SMITH-WATERMAN ALGORITHM ---
+            window.runSmithWaterman = function() {
+                const seq1 = globalSeq;
+                const refRaw = document.getElementById('sw-ref-input').value;
+                const seq2 = cleanSequence(refRaw);
+                const output = document.getElementById('sw-results');
+
+                if(!seq1 || !seq2) {
+                    output.innerText = "Error: Please provide both input and reference sequences.";
+                    return;
+                }
+                if(seq1.length > 2000 || seq2.length > 2000) {
+                    output.innerText = "Error: Sequences too long (>2000bp) for browser-based alignment.";
+                    return;
+                }
+
+                // Match/Mismatch/Gap scores
+                const MATCH = 2;
+                const MISMATCH = -1;
+                const GAP = -1;
+
+                // Init matrices
+                const score = Array(seq1.length + 1).fill(0).map(() => Array(seq2.length + 1).fill(0));
+                let maxScore = 0;
+                let maxI = 0;
+                let maxJ = 0;
+
+                // Fill
+                for(let i=1; i<=seq1.length; i++) {
+                    for(let j=1; j<=seq2.length; j++) {
+                        const s = (seq1[i-1] === seq2[j-1]) ? MATCH : MISMATCH;
+                        const val = Math.max(
+                            0,
+                            score[i-1][j-1] + s,
+                            score[i-1][j] + GAP,
+                            score[i][j-1] + GAP
+                        );
+                        score[i][j] = val;
+                        if(val > maxScore) {
+                            maxScore = val;
+                            maxI = i;
+                            maxJ = j;
+                        }
+                    }
+                }
+
+                // Traceback (Simplified)
+                let align1 = "";
+                let align2 = "";
+                let i = maxI;
+                let j = maxJ;
+
+                while(i > 0 && j > 0 && score[i][j] > 0) {
+                    if (score[i][j] === score[i-1][j-1] + ((seq1[i-1] === seq2[j-1]) ? MATCH : MISMATCH)) {
+                        align1 = seq1[i-1] + align1;
+                        align2 = seq2[j-1] + align2;
+                        i--; j--;
+                    } else if (score[i][j] === score[i-1][j] + GAP) {
+                        align1 = seq1[i-1] + align1;
+                        align2 = "-" + align2;
+                        i--;
+                    } else {
+                        align1 = "-" + align1;
+                        align2 = seq2[j-1] + align2;
+                        j--;
+                    }
+                }
+
+                // Formatting output
+                let html = `Alignment Score: ${maxScore}\n\n`;
+                html += `Query: ${align1}\n`;
+                
+                // Match line
+                let matchLine = "";
+                for(let k=0; k<align1.length; k++) {
+                    if(align1[k] === align2[k]) matchLine += "|";
+                    else if (align1[k] === '-' || align2[k] === '-') matchLine += " ";
+                    else matchLine += ".";
+                }
+                html += `       ${matchLine}\n`;
+                html += `Ref:   ${align2}`;
+
+                output.innerText = html;
+                window.log(`Smith-Waterman: Score ${maxScore}`);
+            };
 
             // --- NEW: CPG ISLAND DETECTOR ---
             window.runCpGScan = function() {
@@ -914,11 +1048,11 @@
 
             // --- NEW: CODON OPTIMIZER ---
             window.runCodonOptimization = function() {
-                if(!currentProtein) return;
+                if(!currentProteinRaw) return;
                 const out = document.getElementById('optimizer-out');
                 
                 let optSeq = "";
-                for(let aa of currentProtein) {
+                for(let aa of currentProteinRaw) {
                     optSeq += optimalCodonsEcoli[aa] || "NNN";
                 }
                 
@@ -968,7 +1102,7 @@
             // --- VARIANT CALLER ---
             window.runVariantCaller = function() {
                 const refRaw = document.getElementById('refInput').value;
-                const ref = cleanSeq(refRaw);
+                const ref = cleanSequence(refRaw);
                 const sample = globalSeq; 
                 
                 if(!ref || !sample) return;
@@ -1155,7 +1289,7 @@
                 
                 const seq1 = globalSeq;
                 const refVal = document.getElementById('refInput').value;
-                const seq2 = refVal ? cleanSeq(refVal) : globalSeq;
+                const seq2 = refVal ? cleanSequence(refVal) : globalSeq;
                 
                 if(!seq1 || !seq2) {
                      dCtx.fillStyle = "#333"; dCtx.fillText("NO DATA", 10, 20);
@@ -1237,7 +1371,9 @@
                 let formatted = "";
                 for(let i=0; i<globalSeq.length; i+=groupSize) {
                     formatted += globalSeq.substring(i, i+groupSize) + " ";
-                    if((i + groupSize) % 60 === 0) formatted += "\n";
+                    if((i + groupSize) % 60 === 0 && (i + groupSize) < seq.length) {
+                        formatted += "\n";
+                    }
                 }
                 document.getElementById('dnaInput').value = formatted.trim();
                 window.log(`SEQUENCE FORMATTED (BLOCKS OF ${groupSize})`);
@@ -1377,7 +1513,7 @@
             
             // Genomic Matrix Rain Setup
             const letters = "ATCG".split("");
-            const fontSize = 16; // Increased font size for better visibility
+            const fontSize = 16;
             let columns = [];
             let drops = [];
             
@@ -1387,7 +1523,7 @@
                     bgC.height = window.innerHeight;
                     columns = Math.floor(bgC.width / fontSize);
                     drops = [];
-                    for(let x = 0; x < columns; x++) drops[x] = Math.random() * -100; // Start offscreen
+                    for(let x = 0; x < columns; x++) drops[x] = Math.random() * -100;
                 }
             }
 
@@ -1396,26 +1532,25 @@
                 
                 // 1. Genomic Matrix Rain (Background)
                 initMatrix();
-                bgCtx.fillStyle = "rgba(2, 2, 2, 0.1)"; // Slower trail fade for smoother slow movement
+                bgCtx.fillStyle = "rgba(2, 2, 2, 0.1)"; // Trail fade
                 bgCtx.fillRect(0, 0, bgC.width, bgC.height);
                 
-                bgCtx.shadowBlur = 4; // Reduced neon glow to be less distracting
+                bgCtx.shadowBlur = 4;
                 bgCtx.shadowColor = "rgba(0, 240, 255, 0.3)";
-                bgCtx.fillStyle = "rgba(0, 240, 255, 0.15)"; // Dimmer text to fade into the background
+                bgCtx.fillStyle = "rgba(0, 240, 255, 0.15)";
                 bgCtx.font = "bold " + fontSize + "px 'Courier New', monospace";
                 
                 for(let i = 0; i < drops.length; i++) {
                     const text = letters[Math.floor(Math.random() * letters.length)];
                     bgCtx.fillText(text, i * fontSize, drops[i] * fontSize);
                     
-                    // Reset drop to top randomly after it crosses the screen
                     if(drops[i] * fontSize > bgC.height && Math.random() > 0.99) {
                         drops[i] = 0;
                     }
-                    drops[i] += 0.15; // Slower fall speed
+                    drops[i] += 0.15; // Slow fall speed
                 }
                 
-                bgCtx.shadowBlur = 0; // Reset shadow for scanlines
+                bgCtx.shadowBlur = 0; 
 
                 // Add scanlines over matrix
                 bgCtx.fillStyle = `rgba(0, 0, 0, 0.3)`;
@@ -1457,7 +1592,6 @@
                     window.processData();
                     window.runVariantCaller();
                 } else if(type === 'cpg') {
-                    // Generate a sequence with an artificial CpG island
                     let s = "ATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGC";
                     let island = "CGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCG";
                     document.getElementById('dnaInput').value = s + island + s;

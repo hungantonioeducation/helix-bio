@@ -42,7 +42,7 @@
         /* --- BACKGROUND FX --- */
         #bgCanvas {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1; pointer-events: none; opacity: 0.5;
+            z-index: 1; pointer-events: none; opacity: 1.0; /* Fixed: Increased opacity to make it clearly visible */
         }
 
         /* --- SIDEBAR --- */
@@ -1375,57 +1375,56 @@
             const hC = document.getElementById('helixCanvas'), hCtx = hC.getContext('2d');
             let time = 0;
             
-            // Background particles
-            const particles = [];
-            for(let i=0; i<60; i++) {
-                particles.push({
-                    x: Math.random() * window.innerWidth,
-                    y: Math.random() * window.innerHeight,
-                    vx: (Math.random() - 0.5) * 0.4,
-                    vy: (Math.random() - 0.5) * 0.4
-                });
+            // Genomic Matrix Rain Setup
+            const letters = "ATCG".split("");
+            const fontSize = 16; // Increased font size for better visibility
+            let columns = [];
+            let drops = [];
+            
+            function initMatrix() {
+                if(bgC.width !== window.innerWidth || bgC.height !== window.innerHeight) {
+                    bgC.width = window.innerWidth;
+                    bgC.height = window.innerHeight;
+                    columns = Math.floor(bgC.width / fontSize);
+                    drops = [];
+                    for(let x = 0; x < columns; x++) drops[x] = Math.random() * -100; // Start offscreen
+                }
             }
 
             function animLoop() {
                 time += 0.05;
-                if(bgC.width !== window.innerWidth) { bgC.width = window.innerWidth; bgC.height = window.innerHeight; }
-                bgCtx.clearRect(0,0,bgC.width, bgC.height);
                 
-                // Draw floating network
-                bgCtx.fillStyle = "rgba(0, 240, 255, 0.4)";
-                bgCtx.strokeStyle = "rgba(0, 240, 255, 0.15)";
-                bgCtx.lineWidth = 1;
+                // 1. Genomic Matrix Rain (Background)
+                initMatrix();
+                bgCtx.fillStyle = "rgba(2, 2, 2, 0.1)"; // Slower trail fade for smoother slow movement
+                bgCtx.fillRect(0, 0, bgC.width, bgC.height);
                 
-                for(let i=0; i<particles.length; i++) {
-                    let p = particles[i];
-                    p.x += p.vx; p.y += p.vy;
-                    if(p.x < 0) p.x = bgC.width; if(p.x > bgC.width) p.x = 0;
-                    if(p.y < 0) p.y = bgC.height; if(p.y > bgC.height) p.y = 0;
+                bgCtx.shadowBlur = 4; // Reduced neon glow to be less distracting
+                bgCtx.shadowColor = "rgba(0, 240, 255, 0.3)";
+                bgCtx.fillStyle = "rgba(0, 240, 255, 0.15)"; // Dimmer text to fade into the background
+                bgCtx.font = "bold " + fontSize + "px 'Courier New', monospace";
+                
+                for(let i = 0; i < drops.length; i++) {
+                    const text = letters[Math.floor(Math.random() * letters.length)];
+                    bgCtx.fillText(text, i * fontSize, drops[i] * fontSize);
                     
-                    bgCtx.beginPath();
-                    bgCtx.arc(p.x, p.y, 1.5, 0, Math.PI*2);
-                    bgCtx.fill();
-                    
-                    for(let j=i+1; j<particles.length; j++) {
-                        let p2 = particles[j];
-                        let dx = p.x - p2.x, dy = p.y - p2.y;
-                        let dist = Math.sqrt(dx*dx + dy*dy);
-                        if(dist < 120) {
-                            bgCtx.beginPath();
-                            bgCtx.moveTo(p.x, p.y);
-                            bgCtx.lineTo(p2.x, p2.y);
-                            bgCtx.stroke();
-                        }
+                    // Reset drop to top randomly after it crosses the screen
+                    if(drops[i] * fontSize > bgC.height && Math.random() > 0.99) {
+                        drops[i] = 0;
                     }
+                    drops[i] += 0.15; // Slower fall speed
                 }
+                
+                bgCtx.shadowBlur = 0; // Reset shadow for scanlines
 
-                // Add scanlines over network
-                bgCtx.fillStyle = `rgba(0, 0, 0, 0.15)`;
+                // Add scanlines over matrix
+                bgCtx.fillStyle = `rgba(0, 0, 0, 0.3)`;
                 for(let i=0; i<20; i++) {
-                    const y = (time * 10 + i * 50) % bgC.height;
+                    const y = (time * 15 + i * 50) % bgC.height;
                     bgCtx.fillRect(0, y, bgC.width, 2);
                 }
 
+                // 2. Sidebar Helix Animation (Foreground)
                 if(hC.offsetWidth !== hC.width) { hC.width = hC.offsetWidth; hC.height = hC.offsetHeight; }
                 const hw = hC.width, hh = hC.height;
                 hCtx.fillStyle = "#000"; hCtx.fillRect(0,0,hw,hh);
